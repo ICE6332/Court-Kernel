@@ -25,6 +25,8 @@ use crate::serial::{hcf, qemu_exit_failure, qemu_exit_success};
 #[unsafe(link_section = ".requests")]
 static BASE_REVISION: BaseRevision = BaseRevision::new(3);
 
+// Limine-provided stacks live in bootloader-reclaimable. Do not reclaim that
+// memmap type until each CPU has switched onto a Root Court stack.
 #[used]
 #[unsafe(link_section = ".requests")]
 static STACK_SIZE: StackSizeRequest = StackSizeRequest::new(0x10000);

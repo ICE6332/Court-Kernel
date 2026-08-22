@@ -2,6 +2,15 @@
 //!
 //! First slice: kernel higher-half + restrictive HHDM, then `mov cr3`.
 //! Courtlet address spaces come later.
+//!
+//! Deferred, do not "just" do these later without the matching prelude:
+//! - Do not reclaim bootloader-reclaimable until every CPU has switched off
+//!   the Limine stack (those stacks live in reclaimable). Own per-CPU stacks,
+//!   then `mov rsp`, then reclaim.
+//! - PTE NX (bit 63) requires `IA32_EFER.NXE` first; the reverse order is a
+//!   reserved-bit `#PF`. W^X is postponed on purpose.
+//! - Independent Courtlet CR3s should clone the shared kernel higher-half
+//!   PML4 entry (index 511), not remap the kernel from scratch.
 
 use core::ptr::addr_of;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -19,6 +28,7 @@ const WRITE: u64 = 1 << 1;
 const HUGE: u64 = 1 << 7;
 const PHYS_MASK: u64 = 0x000f_ffff_ffff_f000;
 const TABLE_FLAGS: u64 = PRESENT | WRITE;
+// NX is omitted until IA32_EFER.NXE is set; bit 63 is reserved without it.
 const PAGE_FLAGS: u64 = PRESENT | WRITE;
 
 static ROOT_CR3: AtomicU64 = AtomicU64::new(0);
@@ -38,6 +48,8 @@ pub struct PageMap {
     pub table_pages: u64,
 }
 
+/// Single-PML4 mapper. Courtlet address spaces need a clone of the shared
+/// kernel higher-half PML4 entry (index 511), not a second walk of `map_range`.
 struct Mapper<'a> {
     bump: &'a mut BumpAllocator,
     pml4_phys: u64,
