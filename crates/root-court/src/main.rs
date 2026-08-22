@@ -60,10 +60,14 @@ unsafe extern "C" fn kmain() -> ! {
     println!("Court Kernel Root Court");
     println!("MVP-1 UEFI bring-up");
 
-    println!(
-        "limine base revision field: {}",
-        BASE_REVISION.loaded_revision()
-    );
+    if BASE_REVISION.loaded_revision_valid() {
+        println!(
+            "limine loaded base revision: {}",
+            BASE_REVISION.loaded_revision()
+        );
+    } else {
+        println!("limine loaded base revision: (magic word not rewritten)");
+    }
     if !BASE_REVISION.is_supported() {
         println!("warn: limine did not zero the requested base revision");
     }

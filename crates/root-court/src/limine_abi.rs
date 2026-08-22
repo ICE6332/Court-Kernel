@@ -1,12 +1,28 @@
 //! Minimal Limine boot protocol requests.
 //!
-//! Implemented locally so Root Court stays on stable Rust 1.98. The layout
-//! matches Limine protocol IDs used by the v10.x bootloader.
+//! Constants are copied from limine-protocol `include/limine.h` (trunk).
+//! A wrong magic word is silent: Limine will not ACK the tag and will load
+//! the kernel as base revision 0. Do not invent or "remember" these values.
 
 use core::ffi::CStr;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
+/// `LIMINE_COMMON_MAGIC`
 const COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
+
+/// `LIMINE_BASE_REVISION(N)` first two words.
+const BASE_REVISION_MAGIC: [u64; 2] = [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc];
+
+/// `LIMINE_REQUESTS_START_MARKER`
+const REQUESTS_START_MARKER: [u64; 4] = [
+    0xf6b8f4b39de7d1ae,
+    0xfab91a6940fcb9cf,
+    0x785c6ed015d3e316,
+    0x181e920a7852b9d9,
+];
+
+/// `LIMINE_REQUESTS_END_MARKER`
+const REQUESTS_END_MARKER: [u64; 2] = [0xadc0e0531bb10d03, 0x9572709f31764c62];
 
 #[repr(C)]
 pub struct BaseRevision {
@@ -17,17 +33,24 @@ pub struct BaseRevision {
 impl BaseRevision {
     pub const fn new(revision: u64) -> Self {
         Self {
-            magic: [0xf9562b2d5c95a6c8, 0x6a7f439829d2dc32],
+            magic: BASE_REVISION_MAGIC,
             revision,
         }
     }
 
+    /// `LIMINE_LOADED_BASE_REVISION`: word 1, rewritten by the bootloader.
     pub fn loaded_revision(&self) -> u64 {
-        unsafe { core::ptr::addr_of!(self.revision).read_volatile() }
+        unsafe { core::ptr::addr_of!(self.magic[1]).read_volatile() }
     }
 
+    /// `LIMINE_LOADED_BASE_REVISION_VALID`: word 1 is no longer the original magic.
+    pub fn loaded_revision_valid(&self) -> bool {
+        self.loaded_revision() != BASE_REVISION_MAGIC[1]
+    }
+
+    /// `LIMINE_BASE_REVISION_SUPPORTED`: word 2 == 0 after a successful ACK.
     pub fn is_supported(&self) -> bool {
-        self.loaded_revision() == 0
+        unsafe { core::ptr::addr_of!(self.revision).read_volatile() == 0 }
     }
 }
 
@@ -39,12 +62,7 @@ pub struct RequestsStartMarker {
 impl RequestsStartMarker {
     pub const fn new() -> Self {
         Self {
-            _marker: [
-                0xf6b8f4b39de7d1ae,
-                0xfab91a8d6e8c0f23,
-                0x06c0397da013746c,
-                0x13d86c035a1cd3e1,
-            ],
+            _marker: REQUESTS_START_MARKER,
         }
     }
 }
@@ -57,7 +75,7 @@ pub struct RequestsEndMarker {
 impl RequestsEndMarker {
     pub const fn new() -> Self {
         Self {
-            _marker: [0xadc0e0531bb10d03, 0x9572709f31764c62],
+            _marker: REQUESTS_END_MARKER,
         }
     }
 }
@@ -111,6 +129,7 @@ pub struct BootloaderInfoRequest(Request<(), BootloaderInfoResponse>);
 
 impl BootloaderInfoRequest {
     pub const fn new() -> Self {
+        // LIMINE_BOOTLOADER_INFO_REQUEST_ID
         Self(Request::new([0xf55038d8e2a1202f, 0x279426fcf5f59740], ()))
     }
 
@@ -129,6 +148,7 @@ pub struct FirmwareTypeRequest(Request<(), FirmwareTypeResponse>);
 
 impl FirmwareTypeRequest {
     pub const fn new() -> Self {
+        // LIMINE_FIRMWARE_TYPE_REQUEST_ID
         Self(Request::new([0x8c2f75d90bef28a8, 0x7045a4688eac00c3], ()))
     }
 
@@ -147,6 +167,7 @@ pub struct HhdmRequest(Request<(), HhdmResponse>);
 
 impl HhdmRequest {
     pub const fn new() -> Self {
+        // LIMINE_HHDM_REQUEST_ID
         Self(Request::new([0x48dcf1cb8ad2b852, 0x63984e959a98244b], ()))
     }
 
@@ -165,6 +186,7 @@ pub struct StackSizeResponse {
 
 impl StackSizeRequest {
     pub const fn new(size: u64) -> Self {
+        // LIMINE_STACK_SIZE_REQUEST_ID
         Self(Request::new([0x224ef0460a8e8926, 0xe1cb0fc25f46ea3d], size))
     }
 
@@ -199,6 +221,7 @@ pub struct MemmapRequest(Request<(), MemmapResponse>);
 
 impl MemmapRequest {
     pub const fn new() -> Self {
+        // LIMINE_MEMMAP_REQUEST_ID
         Self(Request::new([0x67cf3d9d378a806f, 0xe304acdfc50c3c62], ()))
     }
 
@@ -244,6 +267,7 @@ pub struct MpRequest(Request<u64, MpResponse>);
 
 impl MpRequest {
     pub const fn new(flags: u64) -> Self {
+        // LIMINE_MP_REQUEST_ID
         Self(Request::new(
             [0x95a67b819a1b857e, 0xa0b61b723b6a73e0],
             flags,
