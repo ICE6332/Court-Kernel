@@ -103,7 +103,7 @@ MVP-1 QEMU/UEFI bring-up 已在 Debian WSL2 上按 RFC-0001 §20.2 跑通：
 
 ```text
 UEFI64 + Limine 10 加载 Root Court ELF（higher-half, long mode, HHDM paging）
-自有 GDT/IDT/TSS（AP 不 ltr 共享 Busy TSS）
+自有 per-CPU GDT/TSS/IST（每核 ltr 0x18；IDT 256 门带真实向量号）
 usable 区 bump allocator + HHDM 试写
 x2APIC 周期 timer + ICR self/all-except-self IPI ping-pong
 Limine MP 拉起 3 个 AP（-smp 4, -cpu max），isa-debug-exit 成功

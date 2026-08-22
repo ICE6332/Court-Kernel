@@ -1,7 +1,10 @@
 //! Kernel IDT: exceptions, APIC timer, IPI, spurious.
+//!
+//! Every vector 0..=255 has its own 16-byte stub that pushes the *real*
+//! vector number (see `idt_stubs.s`). A shared `isr_unexpected` that reports
+//! 0xFFFF would hide stray IRQs while writing page tables.
 
-use core::arch::asm;
-use core::arch::naked_asm;
+use core::arch::{asm, global_asm, naked_asm};
 use core::ptr::{addr_of, addr_of_mut};
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -13,8 +16,20 @@ pub const TIMER_VECTOR: u8 = 0x20;
 pub const IPI_VECTOR: u8 = 0x30;
 pub const SPURIOUS_VECTOR: u8 = 0xFF;
 
+const STUB_STRIDE: u64 = 16;
+
 pub static TIMER_TICKS: AtomicU32 = AtomicU32::new(0);
 pub static IPI_PONG: AtomicU32 = AtomicU32::new(0);
+
+global_asm!(include_str!("idt_stubs.s"));
+
+unsafe extern "C" {
+    fn isr_stub_table();
+}
+
+fn stub(vec: u8) -> u64 {
+    isr_stub_table as *const () as u64 + vec as u64 * STUB_STRIDE
+}
 
 #[repr(C, packed)]
 struct TablePtr {
@@ -47,8 +62,7 @@ impl IdtEntry {
         }
     }
 
-    fn gate(handler: unsafe extern "C" fn(), ist: u8) -> Self {
-        let offset = handler as usize as u64;
+    fn gate(offset: u64, ist: u8) -> Self {
         Self {
             offset_low: offset as u16,
             selector: KERNEL_CS,
@@ -66,120 +80,21 @@ struct Idt([IdtEntry; 256]);
 
 static mut IDT: Idt = Idt([IdtEntry::empty(); 256]);
 
-macro_rules! isr_no_err {
-    ($name:ident, $vec:expr) => {
-        #[unsafe(naked)]
-        unsafe extern "C" fn $name() {
-            naked_asm!(
-                "push 0",
-                "push {v}",
-                "jmp {common}",
-                v = const $vec,
-                common = sym isr_common,
-            );
-        }
-    };
-}
-
-macro_rules! isr_err {
-    ($name:ident, $vec:expr) => {
-        #[unsafe(naked)]
-        unsafe extern "C" fn $name() {
-            naked_asm!(
-                "push {v}",
-                "jmp {common}",
-                v = const $vec,
-                common = sym isr_common,
-            );
-        }
-    };
-}
-
-isr_no_err!(isr_0, 0);
-isr_no_err!(isr_1, 1);
-isr_no_err!(isr_2, 2);
-isr_no_err!(isr_3, 3);
-isr_no_err!(isr_4, 4);
-isr_no_err!(isr_5, 5);
-isr_no_err!(isr_6, 6);
-isr_no_err!(isr_7, 7);
-isr_err!(isr_8, 8);
-isr_no_err!(isr_9, 9);
-isr_err!(isr_10, 10);
-isr_err!(isr_11, 11);
-isr_err!(isr_12, 12);
-isr_err!(isr_13, 13);
-isr_err!(isr_14, 14);
-isr_no_err!(isr_15, 15);
-isr_no_err!(isr_16, 16);
-isr_err!(isr_17, 17);
-isr_no_err!(isr_18, 18);
-isr_no_err!(isr_19, 19);
-isr_no_err!(isr_20, 20);
-isr_err!(isr_21, 21);
-isr_no_err!(isr_22, 22);
-isr_no_err!(isr_23, 23);
-isr_no_err!(isr_24, 24);
-isr_no_err!(isr_25, 25);
-isr_no_err!(isr_26, 26);
-isr_no_err!(isr_27, 27);
-isr_no_err!(isr_28, 28);
-isr_no_err!(isr_29, 29);
-isr_no_err!(isr_30, 30);
-isr_no_err!(isr_31, 31);
-isr_no_err!(isr_timer, TIMER_VECTOR as u64);
-isr_no_err!(isr_ipi, IPI_VECTOR as u64);
-isr_no_err!(isr_spurious, SPURIOUS_VECTOR as u64);
-isr_no_err!(isr_unexpected, 0xFFFF);
-
 /// Fill the IDT on the BSP, then `lidt` on this CPU.
-pub fn init() {
+pub fn init() -> Result<(), &'static str> {
+    if stub(1).wrapping_sub(stub(0)) != STUB_STRIDE {
+        return Err("ISR stub stride is not 16 bytes");
+    }
     // SAFETY: interrupts are off; only the BSP fills the table.
     unsafe {
         let idt = &mut *addr_of_mut!(IDT);
-        for entry in idt.0.iter_mut() {
-            *entry = IdtEntry::gate(isr_unexpected, 0);
+        for vec in 0..=255u8 {
+            let ist = if vec == 8 { 1 } else { 0 };
+            idt.0[vec as usize] = IdtEntry::gate(stub(vec), ist);
         }
-        let mut set = |vec: u8, handler: unsafe extern "C" fn(), ist: u8| {
-            idt.0[vec as usize] = IdtEntry::gate(handler, ist);
-        };
-        set(0, isr_0, 0);
-        set(1, isr_1, 0);
-        set(2, isr_2, 0);
-        set(3, isr_3, 0);
-        set(4, isr_4, 0);
-        set(5, isr_5, 0);
-        set(6, isr_6, 0);
-        set(7, isr_7, 0);
-        set(8, isr_8, 1);
-        set(9, isr_9, 0);
-        set(10, isr_10, 0);
-        set(11, isr_11, 0);
-        set(12, isr_12, 0);
-        set(13, isr_13, 0);
-        set(14, isr_14, 0);
-        set(15, isr_15, 0);
-        set(16, isr_16, 0);
-        set(17, isr_17, 0);
-        set(18, isr_18, 0);
-        set(19, isr_19, 0);
-        set(20, isr_20, 0);
-        set(21, isr_21, 0);
-        set(22, isr_22, 0);
-        set(23, isr_23, 0);
-        set(24, isr_24, 0);
-        set(25, isr_25, 0);
-        set(26, isr_26, 0);
-        set(27, isr_27, 0);
-        set(28, isr_28, 0);
-        set(29, isr_29, 0);
-        set(30, isr_30, 0);
-        set(31, isr_31, 0);
-        set(TIMER_VECTOR, isr_timer, 0);
-        set(IPI_VECTOR, isr_ipi, 0);
-        set(SPURIOUS_VECTOR, isr_spurious, 0);
     }
     load();
+    Ok(())
 }
 
 /// `lidt` using the table filled by [`init`].
@@ -221,6 +136,7 @@ struct InterruptFrame {
 }
 
 #[unsafe(naked)]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn isr_common() {
     naked_asm!(
         "push rax",

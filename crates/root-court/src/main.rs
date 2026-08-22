@@ -158,8 +158,29 @@ unsafe extern "C" fn kmain() -> ! {
     }
     println!("mm: test page phys={scratch_phys:#x} ok");
 
+    if let Some(mp) = MP.response() {
+        if mp.cpus().len() > cpu::MAX_CPUS {
+            println!(
+                "error: {} cpus exceed MAX_CPUS={}",
+                mp.cpus().len(),
+                cpu::MAX_CPUS
+            );
+            qemu_exit_failure();
+        }
+    }
     gdt::init();
-    idt::init();
+    let bsp_slot = MP
+        .response()
+        .map(|mp| cpu_slot(mp, mp.bsp_lapic_id))
+        .unwrap_or(0);
+    if let Err(error) = gdt::load(bsp_slot) {
+        println!("error: gdt load: {error}");
+        qemu_exit_failure();
+    }
+    if let Err(error) = idt::init() {
+        println!("error: idt init: {error}");
+        qemu_exit_failure();
+    }
     apic::mask_legacy_pic();
     match apic::enable_x2apic() {
         Ok(apic_id) => println!("x2apic: enabled id={apic_id:#x}"),
@@ -168,7 +189,10 @@ unsafe extern "C" fn kmain() -> ! {
             qemu_exit_failure();
         }
     }
-    println!("gdt/idt: kernel cs=0x08 tss=0x18");
+    println!(
+        "gdt/idt: kernel cs=0x08 tss=0x18 per-cpu max={}",
+        cpu::MAX_CPUS
+    );
 
     let mut root = RootCourt::new();
     if let Err(error) = root.bootstrap() {
@@ -257,6 +281,13 @@ unsafe extern "C" fn kmain() -> ! {
     qemu_exit_success();
 }
 
+fn cpu_slot(mp: &limine_abi::MpResponse, lapic_id: u32) -> usize {
+    mp.cpus()
+        .iter()
+        .position(|cpu| cpu.lapic_id == lapic_id)
+        .unwrap_or(0)
+}
+
 fn wait_atomic(cell: &AtomicU32, want: u32) -> bool {
     let start = cpu::rdtsc();
     while cell.load(Ordering::Acquire) < want {
@@ -268,8 +299,14 @@ fn wait_atomic(cell: &AtomicU32, want: u32) -> bool {
     true
 }
 
-extern "C" fn ap_entry(_info: &'static MpInfo) -> ! {
-    gdt::load_ap();
+extern "C" fn ap_entry(info: &'static MpInfo) -> ! {
+    let slot = MP
+        .response()
+        .map(|mp| cpu_slot(mp, info.lapic_id))
+        .unwrap_or(usize::MAX);
+    if gdt::load(slot).is_err() {
+        hcf();
+    }
     idt::load();
     if apic::enable_x2apic().is_err() {
         hcf();

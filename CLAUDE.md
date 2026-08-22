@@ -19,7 +19,7 @@ Court Kernel（庭内核，代号 Garden）是一个研究型 OS 架构的 feder
 
 Toolchain is pinned in `rust-toolchain.toml` to **Rust 1.98.0** / edition 2024 (`x86_64-unknown-none` + `llvm-tools-preview` included). Hosted code may use 1.95+ language features (`cfg_select!`, match `if let` guards) and should not assume a Windows global toolchain older than that.
 
-Bare-metal Root Court lives in `crates/root-court` (`#![no_std]`, Limine protocol implemented in-tree so it stays on stable). It now owns GDT/IDT, a usable-map bump allocator, x2APIC timer, and ICR IPI; paging is still the Limine HHDM. Do not mix VMX/EPT work into `court-hosted`. Boot with `scripts/run-qemu.sh` from Linux/WSL2 (`-cpu max` is required for x2APIC). `cargo test --workspace` uses `default-members` and does **not** build the kernel image; use `cargo build -p root-court --release --target x86_64-unknown-none`.
+Bare-metal Root Court lives in `crates/root-court` (`#![no_std]`, Limine protocol implemented in-tree so it stays on stable). It now owns per-CPU GDT/TSS, a 256-vector IDT, a usable-map bump allocator, x2APIC timer, and ICR IPI; paging is still the Limine HHDM. Do not mix VMX/EPT work into `court-hosted`. Boot with `scripts/run-qemu.sh` from Linux/WSL2 (`-cpu max` is required for x2APIC). `cargo test --workspace` uses `default-members` and does **not** build the kernel image; use `cargo build -p root-court --release --target x86_64-unknown-none`.
 
 ## Build, test, run
 

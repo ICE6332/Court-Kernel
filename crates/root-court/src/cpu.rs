@@ -7,6 +7,9 @@ pub const KERNEL_CS: u16 = 0x08;
 pub const KERNEL_DS: u16 = 0x10;
 pub const KERNEL_TSS: u16 = 0x18;
 
+/// Static per-CPU GDT/TSS slots. QEMU bring-up uses 4; raise before large SMP.
+pub const MAX_CPUS: usize = 8;
+
 pub fn cpuid(leaf: u32, subleaf: u32) -> CpuidResult {
     __cpuid_count(leaf, subleaf)
 }

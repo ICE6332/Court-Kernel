@@ -15,7 +15,7 @@ This repository is a research prototype of a federated OS architecture for heter
 | MVP-0A | `court-hosted`: in-process Root Court object model | done |
 | MVP-0B | `court-hosted-linux`: multi-process Unix prototype (`ck-root` / `ck-app` / `ck-net`) | done |
 | MVP-0C | manifest.json + policy.json driven demo | done |
-| MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | done (GDT/IDT, bump allocator, x2APIC timer, ICR IPI) |
+| MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | done (per-CPU GDT/TSS, 256-vector IDT, bump allocator, x2APIC timer, ICR IPI) |
 | Route B | seL4 / Genode substrate | not started |
 | Route C | bare-metal Root Court microhypervisor (VMX/EPT/IOMMU) | not started |
 
