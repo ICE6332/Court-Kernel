@@ -177,6 +177,71 @@ impl HhdmRequest {
 }
 
 #[repr(C)]
+pub struct ExecutableAddressResponse {
+    pub revision: u64,
+    pub physical_base: u64,
+    pub virtual_base: u64,
+}
+
+pub struct ExecutableAddressRequest(Request<(), ExecutableAddressResponse>);
+
+impl ExecutableAddressRequest {
+    pub const fn new() -> Self {
+        // LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID
+        Self(Request::new([0x71ba76863cc55f63, 0xb2644a48c516a487], ()))
+    }
+
+    pub fn response(&self) -> Option<&'static ExecutableAddressResponse> {
+        self.0.response()
+    }
+}
+
+pub const PAGING_MODE_X86_64_4LVL: u64 = 0;
+
+#[repr(C)]
+pub struct PagingModeResponse {
+    pub revision: u64,
+    pub mode: u64,
+}
+
+#[repr(C)]
+pub struct PagingModeRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: AtomicPtr<PagingModeResponse>,
+    mode: u64,
+    max_mode: u64,
+    min_mode: u64,
+}
+
+impl PagingModeRequest {
+    pub const fn four_level() -> Self {
+        Self {
+            id: [
+                COMMON_MAGIC[0],
+                COMMON_MAGIC[1],
+                0x95c1a0edab0944cb,
+                0xa4e5cb3842f7488a,
+            ],
+            revision: 0,
+            response: AtomicPtr::new(core::ptr::null_mut()),
+            mode: PAGING_MODE_X86_64_4LVL,
+            max_mode: PAGING_MODE_X86_64_4LVL,
+            min_mode: PAGING_MODE_X86_64_4LVL,
+        }
+    }
+
+    pub fn response(&self) -> Option<&'static PagingModeResponse> {
+        let ptr = self.response.load(Ordering::Acquire);
+        if ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { &*ptr })
+        }
+    }
+}
+
+#[repr(C)]
 pub struct StackSizeRequest(Request<u64, StackSizeResponse>);
 
 #[repr(C)]
@@ -196,6 +261,20 @@ impl StackSizeRequest {
 }
 
 pub const MEMMAP_USABLE: u64 = 0;
+pub const MEMMAP_BOOTLOADER_RECLAIMABLE: u64 = 5;
+pub const MEMMAP_EXECUTABLE_AND_MODULES: u64 = 6;
+pub const MEMMAP_FRAMEBUFFER: u64 = 7;
+
+/// Revision 3 HHDM covers these memmap types only.
+pub fn hhdm_mapped_rev3(kind: u64) -> bool {
+    matches!(
+        kind,
+        MEMMAP_USABLE
+            | MEMMAP_BOOTLOADER_RECLAIMABLE
+            | MEMMAP_EXECUTABLE_AND_MODULES
+            | MEMMAP_FRAMEBUFFER
+    )
+}
 
 #[repr(C)]
 pub struct MemmapEntry {

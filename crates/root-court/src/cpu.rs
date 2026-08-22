@@ -100,6 +100,32 @@ pub unsafe fn inb(port: u16) -> u8 {
     value
 }
 
+pub unsafe fn load_cr3(phys: u64) {
+    // SAFETY: caller mapped the current RIP, stack, and GDT/IDT at `phys`.
+    // No `nomem`: the page-map change must order against later memory ops.
+    unsafe {
+        asm!("mov cr3, {}", in(reg) phys, options(nostack));
+    }
+}
+
+pub fn cr3() -> u64 {
+    let value: u64;
+    unsafe {
+        asm!("mov {}, cr3", out(reg) value, options(nomem, nostack, preserves_flags));
+    }
+    value
+}
+
+pub const CR4_LA57: u64 = 1 << 12;
+
+pub fn cr4() -> u64 {
+    let value: u64;
+    unsafe {
+        asm!("mov {}, cr4", out(reg) value, options(nomem, nostack, preserves_flags));
+    }
+    value
+}
+
 pub fn cr2() -> u64 {
     let value: u64;
     // SAFETY: reading CR2 is always allowed in kernel mode.

@@ -8,13 +8,14 @@ mod idt;
 mod limine_abi;
 mod mm;
 mod object;
+mod paging;
 mod serial;
 
 use core::sync::atomic::{AtomicU32, Ordering};
 use limine_abi::{
-    BaseRevision, BootloaderInfoRequest, FirmwareTypeRequest, HhdmRequest, MemmapRequest, MpInfo,
-    MpRequest, RequestsEndMarker, RequestsStartMarker, StackSizeRequest, FIRMWARE_UEFI64,
-    MEMMAP_USABLE, MP_X2APIC,
+    BaseRevision, BootloaderInfoRequest, ExecutableAddressRequest, FirmwareTypeRequest, HhdmRequest,
+    MemmapRequest, MpInfo, MpRequest, PagingModeRequest, RequestsEndMarker, RequestsStartMarker,
+    StackSizeRequest, FIRMWARE_UEFI64, MEMMAP_USABLE, MP_X2APIC,
 };
 use object::RootCourt;
 
@@ -42,6 +43,14 @@ static HHDM: HhdmRequest = HhdmRequest::new();
 
 #[used]
 #[unsafe(link_section = ".requests")]
+static EXECUTABLE: ExecutableAddressRequest = ExecutableAddressRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static PAGING_MODE: PagingModeRequest = PagingModeRequest::four_level();
+
+#[used]
+#[unsafe(link_section = ".requests")]
 static MEMMAP: MemmapRequest = MemmapRequest::new();
 
 #[used]
@@ -62,7 +71,7 @@ static AP_READY: AtomicU32 = AtomicU32::new(0);
 unsafe extern "C" fn kmain() -> ! {
     serial::init();
     println!("Court Kernel Root Court");
-    println!("MVP-1 UEFI bring-up");
+    println!("MVP-2 own page tables");
 
     if BASE_REVISION.loaded_revision_valid() {
         println!(
@@ -158,6 +167,49 @@ unsafe extern "C" fn kmain() -> ! {
     }
     println!("mm: test page phys={scratch_phys:#x} ok");
 
+    let exec = match EXECUTABLE.response() {
+        Some(exec) => exec,
+        None => {
+            println!("error: no executable address response");
+            qemu_exit_failure();
+        }
+    };
+    println!(
+        "kernel: virt {:#x} phys {:#x}",
+        exec.virtual_base, exec.physical_base
+    );
+
+    let pages = match paging::build(
+        &mut bump,
+        hhdm,
+        exec.physical_base,
+        exec.virtual_base,
+        map.entries(),
+    ) {
+        Ok(pages) => pages,
+        Err(error) => {
+            println!("error: page tables: {error}");
+            qemu_exit_failure();
+        }
+    };
+    println!(
+        "paging: kernel {:#x}..{:#x} -> {:#x} ({} KiB)",
+        pages.kernel_virt,
+        pages.kernel_virt + pages.kernel_len,
+        pages.kernel_phys,
+        pages.kernel_len / 1024
+    );
+    println!(
+        "paging: hhdm {} KiB in {} spans, {} table pages, pml4 {:#x}",
+        pages.hhdm_bytes / 1024,
+        pages.hhdm_spans,
+        pages.table_pages,
+        pages.pml4_phys
+    );
+    if let Some(mode) = PAGING_MODE.response() {
+        println!("paging: limine mode {}", mode.mode);
+    }
+
     if let Some(mp) = MP.response() {
         if mp.cpus().len() > cpu::MAX_CPUS {
             println!(
@@ -193,6 +245,24 @@ unsafe extern "C" fn kmain() -> ! {
         "gdt/idt: kernel cs=0x08 tss=0x18 per-cpu max={}",
         cpu::MAX_CPUS
     );
+
+    // SAFETY: tables cover kernel, IST/GDT/IDT, stack (reclaimable HHDM), and usable.
+    unsafe { paging::activate(pages.pml4_phys) };
+    if cpu::cr3() & 0x000f_ffff_ffff_f000 != pages.pml4_phys {
+        println!("error: CR3 is {:#x}, expected {:#x}", cpu::cr3(), pages.pml4_phys);
+        qemu_exit_failure();
+    }
+    // SAFETY: scratch page is still HHDM-mapped after the CR3 switch.
+    if unsafe { scratch_virt.read() } != 0x5A {
+        println!("error: HHDM lost 0x5A after CR3");
+        qemu_exit_failure();
+    }
+    unsafe { scratch_virt.write(0xA5) };
+    if unsafe { scratch_virt.read() } != 0xA5 {
+        println!("error: HHDM not writable after CR3");
+        qemu_exit_failure();
+    }
+    println!("paging: cr3 {:#x} hhdm live", pages.pml4_phys);
 
     let mut root = RootCourt::new();
     if let Err(error) = root.bootstrap() {
@@ -300,6 +370,9 @@ fn wait_atomic(cell: &AtomicU32, want: u32) -> bool {
 }
 
 extern "C" fn ap_entry(info: &'static MpInfo) -> ! {
+    if paging::load_published().is_err() {
+        hcf();
+    }
     let slot = MP
         .response()
         .map(|mp| cpu_slot(mp, info.lapic_id))

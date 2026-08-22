@@ -16,6 +16,7 @@ This repository is a research prototype of a federated OS architecture for heter
 | MVP-0B | `court-hosted-linux`: multi-process Unix prototype (`ck-root` / `ck-app` / `ck-net`) | done |
 | MVP-0C | manifest.json + policy.json driven demo | done |
 | MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | done (per-CPU GDT/TSS, 256-vector IDT, bump allocator, x2APIC timer, ICR IPI) |
+| MVP-2 | Trusted Courtlet (own page tables first) | paging takeover done; court images / corridors open |
 | Route B | seL4 / Genode substrate | not started |
 | Route C | bare-metal Root Court microhypervisor (VMX/EPT/IOMMU) | not started |
 
@@ -79,7 +80,7 @@ Linux / Debian WSL2:
 bash scripts/run-qemu.sh
 ```
 
-This builds `root-court` for `x86_64-unknown-none`, wraps it in a Limine UEFI ISO, and boots QEMU with serial on stdio. Success is `BOOT_OK` plus QEMU exit status 33 (`isa-debug-exit`). The kernel loads its own GDT/IDT, bump-allocates from the Limine usable map, enables x2APIC, and ping-pongs an ICR IPI across 4 CPUs.
+This builds `root-court` for `x86_64-unknown-none`, wraps it in a Limine UEFI ISO, and boots QEMU with serial on stdio. Success is `BOOT_OK` plus QEMU exit status 33 (`isa-debug-exit`). The kernel loads its own GDT/IDT, bump-allocates from the Limine usable map, switches to its own 4-level page tables (kernel higher-half + revision-3 HHDM), enables x2APIC, and ping-pongs an ICR IPI across 4 CPUs.
 
 ## Design in one page
 

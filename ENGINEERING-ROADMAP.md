@@ -109,4 +109,4 @@ x2APIC 周期 timer + ICR self/all-except-self IPI ping-pong
 Limine MP 拉起 3 个 AP（-smp 4, -cpu max），isa-debug-exit 成功
 ```
 
-页表仍是 Limine HHDM，尚未自建。下一阶段是 MVP-2（加载 Court Image / 隔离域雏形 / corridor），不是 VMX。运行：`scripts/run-qemu.sh`。
+MVP-2 第一刀已完成：Root Court 自建 4-level PML4，按 revision 3 语义映射内核 higher-half + restrictive HHDM，BSP/AP 都 `mov cr3` 切过去。页表策略尚未给 Courtlet 做独立地址空间。下一步才是加载 Court Image / 隔离域雏形 / corridor，不是 VMX。运行：`scripts/run-qemu.sh`。
