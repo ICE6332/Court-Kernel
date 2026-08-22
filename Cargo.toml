@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/court-hosted",
+    "crates/court-hosted-linux",
+]
+
+[workspace.package]
+license = "Apache-2.0"
+repository = "https://github.com/ICE6332/Court-Kernel"

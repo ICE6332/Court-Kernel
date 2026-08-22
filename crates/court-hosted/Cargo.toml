@@ -1,0 +1,14 @@
+[package]
+name = "court-hosted"
+version = "0.1.0"
+edition = "2024"
+description = "Linux-hosted research prototype object model for Court Kernel"
+license = "Apache-2.0"
+repository = "https://github.com/ICE6332/Court-Kernel"
+
+[lib]
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+

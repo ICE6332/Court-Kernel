@@ -1,0 +1,31 @@
+[package]
+name = "court-hosted-linux"
+version = "0.1.0"
+edition = "2024"
+description = "Linux multi-process hosted prototype for Court Kernel MVP-0B"
+license = "Apache-2.0"
+repository = "https://github.com/ICE6332/Court-Kernel"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "ck-root"
+path = "src/bin/ck-root.rs"
+
+[[bin]]
+name = "ck-app"
+path = "src/bin/ck-app.rs"
+
+[[bin]]
+name = "ck-net"
+path = "src/bin/ck-net.rs"
+
+[dependencies]
+court-hosted = { path = "../court-hosted" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
