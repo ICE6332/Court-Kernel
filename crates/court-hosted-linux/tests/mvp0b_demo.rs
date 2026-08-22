@@ -1,157 +1,148 @@
 #![cfg(unix)]
 
 use serde_json::Value;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[test]
-fn packet_rx_demo_runs_end_to_end() {
-    let run_dir = std::env::temp_dir().join(format!(
-        "ck-mvp0b-{}",
+fn fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/packet-rx")
+}
+
+fn unique_dir(prefix: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "{prefix}-{}",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos()
     ));
-    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
-    let output = Command::new(env!("CARGO_BIN_EXE_ck-root"))
-        .arg("--demo")
-        .arg("packet-rx")
-        .arg("--run-dir")
-        .arg(&run_dir)
+fn run_root(args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_ck-root"))
+        .args(args)
         .env("CK_APP_BIN", env!("CARGO_BIN_EXE_ck-app"))
         .env("CK_NET_BIN", env!("CARGO_BIN_EXE_ck-net"))
         .output()
-        .unwrap();
+        .unwrap()
+}
 
+fn read_events(trace_path: &Path) -> Vec<Value> {
+    std::fs::read_to_string(trace_path)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect()
+}
+
+fn assert_success(output: &std::process::Output, label: &str) {
     assert!(
         output.status.success(),
-        "ck-root failed\nstdout:\n{}\nstderr:\n{}",
+        "{label} failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
 
-    let trace_path = run_dir.join("trace.ndjson");
-    let trace = std::fs::read_to_string(&trace_path).unwrap();
-    let events = trace
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .collect::<Vec<_>>();
+fn assert_packet_rx_trace(events: &[Value]) {
+    assert_event(events, "lookup", "ok");
+    assert_event(events, "open_denied", "no_right");
+    assert_event(events, "grant", "ok");
+    assert_event(events, "open", "ok");
+    assert_event(events, "send", "ok");
+    assert_event(events, "recv", "ok");
+    assert_event(events, "revoke", "ok");
+    assert_event(events, "send_after_revoke", "revoked");
+    assert_event(events, "fault", "fault");
+    assert_event(events, "peer_down", "peer_down");
+    assert_event(events, "demo_done", "ok");
+    assert!(
+        events.iter().any(|event| {
+            event.get("event").and_then(Value::as_str) == Some("recv")
+                && event.get("detail").and_then(Value::as_str) == Some("mvp0c-packet")
+        }),
+        "missing recv of mvp0c-packet; events: {events:#?}"
+    );
+}
 
-    assert_event(&events, "lookup", "ok");
-    assert_event(&events, "open_denied", "no_right");
-    assert_event(&events, "grant", "ok");
-    assert_event(&events, "open", "ok");
-    assert_event(&events, "send", "ok");
-    assert_event(&events, "recv", "ok");
-    assert_event(&events, "revoke", "ok");
-    assert_event(&events, "send_after_revoke", "revoked");
-    assert_event(&events, "fault", "fault");
-    assert_event(&events, "peer_down", "peer_down");
-    assert_event(&events, "demo_done", "ok");
-
+#[test]
+fn packet_rx_demo_runs_end_to_end() {
+    let run_dir = unique_dir("ck-mvp0c-demo");
+    let output = run_root(&[
+        "--demo",
+        "packet-rx",
+        "--run-dir",
+        run_dir.to_str().unwrap(),
+    ]);
+    assert_success(&output, "ck-root --demo packet-rx");
+    assert_packet_rx_trace(&read_events(&run_dir.join("trace.ndjson")));
     let _ = std::fs::remove_dir_all(&run_dir);
 }
 
 #[test]
-fn manifest_policy_demo_runs_end_to_end() {
-    let root_dir = std::env::temp_dir().join(format!(
-        "ck-mvp0c-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let run_dir = root_dir.join("run");
-    std::fs::create_dir_all(&root_dir).unwrap();
-    let manifest_path = root_dir.join("manifest.json");
-    let policy_path = root_dir.join("policy.json");
-    std::fs::write(
-        &manifest_path,
-        r#"{
-  "courts": [
-    { "name": "app", "role": "app" },
-    { "name": "net0", "role": "net" }
-  ],
-  "corridors": [
-    {
-      "path": "/court/net0/packet/rx",
-      "transport": "shared_ring",
-      "from": "app",
-      "to": "net0",
-      "capacity": 64,
-      "slot_size": 2048
-    }
-  ],
-  "demo": {
-    "packet_payload": "mvp0c-packet"
-  }
-}"#,
-    )
-    .unwrap();
-    std::fs::write(
-        &policy_path,
-        r#"{
-  "grants": [
-    { "court": "app", "path": "/court/net0/packet/rx", "rights": ["send", "observe"] },
-    { "court": "net0", "path": "/court/net0/packet/rx", "rights": ["recv", "observe"] }
-  ],
-  "revokes": [
-    { "court": "app", "path": "/court/net0/packet/rx", "after": "recv" }
-  ],
-  "faults": [
-    { "court": "net0", "after": "revoke", "reason": "mvp0c simulated net court crash" }
-  ],
-  "peer_down": [
-    { "court": "app", "path": "/court/net0/packet/rx", "after": "fault" }
-  ]
-}"#,
-    )
-    .unwrap();
+fn fixture_files_run_end_to_end() {
+    let run_dir = unique_dir("ck-mvp0c-fixture");
+    let fixtures = fixture_dir();
+    let manifest = fixtures.join("manifest.json");
+    let policy = fixtures.join("policy.json");
+    let output = run_root(&[
+        "--manifest",
+        manifest.to_str().unwrap(),
+        "--policy",
+        policy.to_str().unwrap(),
+        "--run-dir",
+        run_dir.to_str().unwrap(),
+    ]);
+    assert_success(&output, "ck-root fixture files");
+    assert_packet_rx_trace(&read_events(&run_dir.join("trace.ndjson")));
+    let _ = std::fs::remove_dir_all(&run_dir);
+}
 
+#[test]
+fn invalid_policy_is_rejected_by_ck_root() {
+    let root_dir = unique_dir("ck-mvp0c-invalid");
+    let run_dir = root_dir.join("run");
+    let policy_path = root_dir.join("policy.json");
+    let fixtures = fixture_dir();
+    let mut policy: Value =
+        serde_json::from_str(&std::fs::read_to_string(fixtures.join("policy.json")).unwrap())
+            .unwrap();
+    policy["revokes"][0]["after"] = Value::String("fault".into());
+    std::fs::write(&policy_path, serde_json::to_vec_pretty(&policy).unwrap()).unwrap();
+
+    let output = run_root(&[
+        "--manifest",
+        fixtures.join("manifest.json").to_str().unwrap(),
+        "--policy",
+        policy_path.to_str().unwrap(),
+        "--run-dir",
+        run_dir.to_str().unwrap(),
+    ]);
+    assert!(
+        !output.status.success(),
+        "ck-root should reject illegal after sequencing"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not before 'revoke'"),
+        "unexpected stderr: {stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&root_dir);
+}
+
+#[test]
+fn help_prints_usage() {
     let output = Command::new(env!("CARGO_BIN_EXE_ck-root"))
-        .arg("--manifest")
-        .arg(&manifest_path)
-        .arg("--policy")
-        .arg(&policy_path)
-        .arg("--run-dir")
-        .arg(&run_dir)
-        .env("CK_APP_BIN", env!("CARGO_BIN_EXE_ck-app"))
-        .env("CK_NET_BIN", env!("CARGO_BIN_EXE_ck-net"))
+        .arg("--help")
         .output()
         .unwrap();
-
-    assert!(
-        output.status.success(),
-        "ck-root manifest demo failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let trace = std::fs::read_to_string(run_dir.join("trace.ndjson")).unwrap();
-    let events = trace
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .collect::<Vec<_>>();
-
-    assert_event(&events, "lookup", "ok");
-    assert_event(&events, "open_denied", "no_right");
-    assert_event(&events, "grant", "ok");
-    assert_event(&events, "open", "ok");
-    assert_event(&events, "send", "ok");
-    assert_event(&events, "recv", "ok");
-    assert_event(&events, "revoke", "ok");
-    assert_event(&events, "send_after_revoke", "revoked");
-    assert_event(&events, "fault", "fault");
-    assert_event(&events, "peer_down", "peer_down");
-    assert_event(&events, "demo_done", "ok");
-    assert!(events.iter().any(|event| {
-        event.get("event").and_then(Value::as_str) == Some("recv")
-            && event.get("detail").and_then(Value::as_str) == Some("mvp0c-packet")
-    }));
-
-    let _ = std::fs::remove_dir_all(&root_dir);
+    assert_success(&output, "ck-root --help");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--manifest"), "{stdout}");
+    assert!(stdout.contains("packet-rx"), "{stdout}");
 }
 
 fn assert_event(events: &[Value], name: &str, status: &str) {

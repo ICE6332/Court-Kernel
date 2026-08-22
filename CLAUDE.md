@@ -15,7 +15,7 @@ Court Kernel（庭内核，代号 Garden）是一个研究型 OS 架构的 feder
 阶段命名（提交历史和 trace 事件名都会出现）：
 - **MVP-0A** = `court-hosted` crate，in-process 对象模型。
 - **MVP-0B** = `court-hosted-linux` crate，多进程 Unix host 原型。
-- **MVP-0C** = 让 ck-root 由 manifest.json + policy.json 驱动，而不是写死 demo。
+- **MVP-0C** = `ck-root` 由 `fixtures/packet-rx/manifest.json` + `policy.json` 驱动；`--demo packet-rx` 是同一套 fixture 的编译内嵌副本。policy `after` 必须指向 pipeline 中更早的 phase。
 
 ## Build, test, run
 
@@ -32,10 +32,10 @@ cargo test  -p court-hosted lookup_without_cap_does_not_authorize_open  # single
 # 内置 fixture
 cargo run -p court-hosted-linux --bin ck-root -- --demo packet-rx --run-dir /tmp/ck-run
 
-# manifest 驱动
+# 与 --demo packet-rx 等价的磁盘 fixture
 cargo run -p court-hosted-linux --bin ck-root -- \
-    --manifest path/to/manifest.json \
-    --policy   path/to/policy.json \
+    --manifest fixtures/packet-rx/manifest.json \
+    --policy   fixtures/packet-rx/policy.json \
     --run-dir  /tmp/ck-run
 ```
 
@@ -68,7 +68,9 @@ cargo run -p court-hosted-linux --bin ck-root -- \
 
 ### Demo 状态机
 
-`root::run_manifest_demo` 是当前唯一的编排入口，按固定顺序推进 demo（不是事件驱动循环）：
+`root::run_manifest_demo` 是当前唯一的编排入口。MVP-0C 的 court/corridor/grant/revoke/fault/peer-down **集合**来自 manifest + policy，执行顺序仍是固定 pipeline（不是通用事件循环）。`policy.*.after` 由 `manifest::validate` 对照 `PHASE_ORDER` 检查，不能指向当前动作或更晚的 phase。
+
+固定顺序：
 
 1. 读 manifest/policy → `validate()` → 建 courts、corridors、shared rings → bind namespace。
 2. spawn `ck-app` / `ck-net` 子进程，accept 它们的 `Hello` 并回 `HelloAck { demo }`。

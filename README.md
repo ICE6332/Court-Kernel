@@ -14,7 +14,7 @@ This repository is a research prototype of a federated OS architecture for heter
 |---|---|---|
 | MVP-0A | `court-hosted`: in-process Root Court object model | done |
 | MVP-0B | `court-hosted-linux`: multi-process Unix prototype (`ck-root` / `ck-app` / `ck-net`) | done |
-| MVP-0C | manifest.json + policy.json driven demo | landed |
+| MVP-0C | manifest.json + policy.json driven demo | done |
 | Route B | seL4 / Genode substrate | not started |
 | Route C | bare-metal Root Court microhypervisor (VMX/EPT/IOMMU) | not started |
 
@@ -27,6 +27,7 @@ Court-Kernel/
   Court-Kernel-RFC-0001.md   architecture and object model
   Court-Kernel-RFC-0002.md   Court Kernel ABI and Corridor ABI draft
   ENGINEERING-ROADMAP.md     route A → B → C
+  fixtures/packet-rx         canonical MVP-0C manifest + policy
   crates/court-hosted        in-process object model (no unsafe)
   crates/court-hosted-linux  Unix multi-process mapping + ck-* binaries
 ```
@@ -44,18 +45,18 @@ End-to-end Unix demo (Linux or WSL2 only):
 cargo test -p court-hosted-linux --test mvp0b_demo
 ```
 
-Run the built-in packet-rx fixture:
+Run the packet-rx fixture (Linux / Debian WSL2):
 
 ```bash
 cargo run -p court-hosted-linux --bin ck-root -- --demo packet-rx --run-dir /tmp/ck-run
 ```
 
-Or drive it from files:
+Or from the checked-in files (same content as `--demo packet-rx`):
 
 ```bash
 cargo run -p court-hosted-linux --bin ck-root -- \
-    --manifest path/to/manifest.json \
-    --policy   path/to/policy.json \
+    --manifest fixtures/packet-rx/manifest.json \
+    --policy   fixtures/packet-rx/policy.json \
     --run-dir  /tmp/ck-run
 ```
 

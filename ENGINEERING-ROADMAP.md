@@ -86,12 +86,15 @@ Unix domain socket = Control Channel corridor
 shared mmap file   = Shared Ring corridor
 ```
 
-MVP-0C 当前目标是把 Root runner 从写死 demo 推进为 manifest + policy 驱动：
+MVP-0C 已完成：Root runner 由 manifest + policy 驱动。
 
 ```text
-1. manifest.json 声明 Courts、Corridors、ring 参数和 demo payload。
-2. policy.json 声明 grant/revoke/fault/peer-down 策略。
+1. fixtures/packet-rx/manifest.json 声明 Courts、Corridors、ring 参数和 demo payload。
+2. fixtures/packet-rx/policy.json 声明 grant/revoke/fault/peer-down 策略。
 3. ck-root --manifest <path> --policy <path> --run-dir <path> 按声明启动 demo。
-4. ck-root --demo packet-rx 保留为内置 fixture 快捷入口。
-5. trace 记录 lookup、open、grant、send、recv、revoke、fault、peer-down、demo_done。
+4. ck-root --demo packet-rx 是同一套 fixture 的编译内嵌副本。
+5. policy.after 必须指向 MVP-0C pipeline 中严格更早的 phase。
+6. trace 记录 lookup、open_denied、grant、open、send、recv、revoke、fault、peer-down、demo_done。
 ```
+
+路线 A 下一步（尚未开始）：第二个服务形态（例如 Storage Court），或给 corridor 补显式状态机。进路线 B/C 的前置条件不变。

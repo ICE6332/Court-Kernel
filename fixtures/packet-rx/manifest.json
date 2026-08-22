@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "courts": [
+    { "name": "app", "role": "app" },
+    { "name": "net0", "role": "net" }
+  ],
+  "corridors": [
+    {
+      "path": "/court/net0/packet/rx",
+      "transport": "shared_ring",
+      "from": "app",
+      "to": "net0",
+      "capacity": 64,
+      "slot_size": 2048
+    }
+  ],
+  "demo": {
+    "packet_payload": "mvp0c-packet"
+  }
+}

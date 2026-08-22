@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "grants": [
+    {
+      "court": "net0",
+      "path": "/court/net0/packet/rx",
+      "rights": ["recv", "observe"]
+    },
+    {
+      "court": "app",
+      "path": "/court/net0/packet/rx",
+      "rights": ["send", "observe"]
+    }
+  ],
+  "revokes": [
+    {
+      "court": "app",
+      "path": "/court/net0/packet/rx",
+      "after": "recv"
+    }
+  ],
+  "faults": [
+    {
+      "court": "net0",
+      "after": "revoke",
+      "reason": "mvp0c simulated net court crash"
+    }
+  ],
+  "peer_down": [
+    {
+      "court": "app",
+      "path": "/court/net0/packet/rx",
+      "after": "fault"
+    }
+  ]
+}
