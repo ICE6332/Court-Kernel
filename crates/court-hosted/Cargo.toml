@@ -1,10 +1,11 @@
 [package]
 name = "court-hosted"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 description = "Linux-hosted research prototype object model for Court Kernel"
-license = "Apache-2.0"
-repository = "https://github.com/ICE6332/Court-Kernel"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [lib]
 path = "src/lib.rs"

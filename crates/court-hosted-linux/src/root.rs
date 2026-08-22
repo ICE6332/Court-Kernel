@@ -1,12 +1,12 @@
-use crate::LinuxResult;
 use crate::control::JsonLinePeer;
 use crate::manifest::{
-    CourtRole, ManifestFile, ManifestTransport, PolicyFile, parse_rights, validate,
+    parse_rights, validate, CourtRole, ManifestFile, ManifestTransport, PolicyFile,
 };
 use crate::protocol::{
     WireCap, WireDemoConfig, WireMessage, WireRights, WireRingInfo, WireStatus, WireTrace,
 };
 use crate::shm_ring::SharedRing;
+use crate::LinuxResult;
 use court_hosted::{CapId, CorridorTransport, Descriptor, HostedRoot, Rights};
 use serde_json::to_writer;
 use std::collections::HashMap;
@@ -189,7 +189,7 @@ fn build_state(config: RootConfig, trace_path: &Path) -> LinuxResult<RootState> 
 
 fn spawn_courts(state: &RootState, sock_path: &Path) -> LinuxResult<HashMap<String, Child>> {
     let mut children = HashMap::new();
-    for (court, _) in state.court_ids.iter() {
+    for court in state.court_ids.keys() {
         let role = court_role(state, court)?;
         children.insert(court.clone(), spawn_court(role, court, sock_path)?);
     }
@@ -342,15 +342,9 @@ fn handle_grant_and_open(
             path: request_path,
             cap: Some(request_cap),
             rights: request_rights,
-        } if request_path == path => {
-            let Some(core_cap) = state.caps_by_id.get(&request_cap.id).copied() else {
-                peer.send(&WireMessage::OpenResult {
-                    status: WireStatus::BadCap,
-                    cap: None,
-                    ring: None,
-                })?;
-                return Err("client opened with unknown cap".into());
-            };
+        } if request_path == path
+            && let Some(core_cap) = state.caps_by_id.get(&request_cap.id).copied() =>
+        {
             let status = match state.root.open(
                 court_id,
                 descriptor,
@@ -385,6 +379,18 @@ fn handle_grant_and_open(
             if status != WireStatus::Ok {
                 return Err(format!("{court} open failed: {status:?}").into());
             }
+        }
+        WireMessage::Open {
+            path: request_path,
+            cap: Some(_),
+            ..
+        } if request_path == path => {
+            peer.send(&WireMessage::OpenResult {
+                status: WireStatus::BadCap,
+                cap: None,
+                ring: None,
+            })?;
+            return Err("client opened with unknown cap".into());
         }
         other => return Err(format!("expected {court} open, got {other:?}").into()),
     }
@@ -521,7 +527,7 @@ fn wire_cap(cap: CapId, rights: Rights) -> WireCap {
 }
 
 fn ck<T>(result: court_hosted::CkResult<T>) -> LinuxResult<T> {
-    result.map_err(|error| format!("core object-model error: {error:?}").into())
+    result.map_err(Into::into)
 }
 
 fn spawn_court(role: &str, court: &str, sock_path: &Path) -> LinuxResult<Child> {

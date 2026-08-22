@@ -1,14 +1,20 @@
-#[cfg(unix)]
 fn main() {
-    if let Err(error) = unix_main() {
-        eprintln!("ck-net: {error}");
-        std::process::exit(1);
+    cfg_select! {
+        unix => {
+            if let Err(error) = unix_main() {
+                eprintln!("ck-net: {error}");
+                std::process::exit(1);
+            }
+        }
+        _ => {
+            eprintln!("ck-net is only available on Linux/WSL2 Unix targets");
+        }
     }
 }
 
 #[cfg(unix)]
 fn unix_main() -> court_hosted_linux::LinuxResult<()> {
-    use court_hosted_linux::net::{NetConfig, run};
+    use court_hosted_linux::net::{run, NetConfig};
     use std::path::PathBuf;
 
     let args: Vec<String> = std::env::args().collect();
@@ -24,9 +30,4 @@ fn required_value(args: &[String], flag: &str) -> court_hosted_linux::LinuxResul
         .find(|pair| pair[0] == flag)
         .map(|pair| pair[1].clone())
         .ok_or_else(|| format!("missing {flag}").into())
-}
-
-#[cfg(not(unix))]
-fn main() {
-    eprintln!("ck-net is only available on Linux/WSL2 Unix targets");
 }

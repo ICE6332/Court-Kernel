@@ -32,6 +32,10 @@ Court-Kernel/
   crates/court-hosted-linux  Unix multi-process mapping + ck-* binaries
 ```
 
+## Toolchain
+
+Pinned to **Rust 1.98.0** via `rust-toolchain.toml` (`edition = "2024"`, `rust-version = "1.98"`). `rustup` will install that compiler when you enter the repo.
+
 ## Build and test
 
 ```bash

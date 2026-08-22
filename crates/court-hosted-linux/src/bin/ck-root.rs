@@ -11,11 +11,17 @@ Usage:
 Manifest and policy must be supplied together.
 ";
 
-#[cfg(unix)]
 fn main() {
-    if let Err(error) = unix_main() {
-        eprintln!("ck-root: {error}");
-        std::process::exit(1);
+    cfg_select! {
+        unix => {
+            if let Err(error) = unix_main() {
+                eprintln!("ck-root: {error}");
+                std::process::exit(1);
+            }
+        }
+        _ => {
+            eprintln!("ck-root is only available on Linux/WSL2 Unix targets");
+        }
     }
 }
 
@@ -90,9 +96,4 @@ fn required_path(
     flag: &str,
 ) -> court_hosted_linux::LinuxResult<std::path::PathBuf> {
     Ok(std::path::PathBuf::from(required_value(args, flag)?))
-}
-
-#[cfg(not(unix))]
-fn main() {
-    eprintln!("ck-root is only available on Linux/WSL2 Unix targets");
 }

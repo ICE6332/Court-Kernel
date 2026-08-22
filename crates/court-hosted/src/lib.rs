@@ -5,6 +5,7 @@
 //! project moves to a Linux multi-process prototype.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::error::Error;
 use std::fmt;
 use std::ops::{BitOr, BitOrAssign};
 
@@ -22,6 +23,24 @@ pub enum CkError {
     QueueFull,
     QueueEmpty,
 }
+
+impl fmt::Display for CkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::BadCap => "bad capability",
+            Self::NoRight => "missing right",
+            Self::Revoked => "capability revoked",
+            Self::NotFound => "not found",
+            Self::InvalidObject => "invalid object",
+            Self::InvalidState => "invalid state",
+            Self::PeerDown => "peer down",
+            Self::QueueFull => "queue full",
+            Self::QueueEmpty => "queue empty",
+        })
+    }
+}
+
+impl Error for CkError {}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CourtId(u64);

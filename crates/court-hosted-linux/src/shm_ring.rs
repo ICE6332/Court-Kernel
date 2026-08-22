@@ -1,5 +1,5 @@
-use crate::LinuxResult;
 use crate::protocol::{EndpointState, WireStatus};
+use crate::LinuxResult;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::mem::size_of;
@@ -74,14 +74,16 @@ impl SharedRing {
             return Err(WireStatus::QueueFull);
         }
 
-        let slot = producer % header.capacity as u64;
+        let slot = producer % u64::from(header.capacity);
+        let len = u32::try_from(payload.len()).map_err(|_| WireStatus::InvalidObject)?;
         // SAFETY: slot_ptr is within the mmap range because slot is modulo
         // capacity, slot_size was validated from the ring header, and the file
         // length was computed as header + capacity * stride. The producer is
-        // the only writer in MVP-0B's SPSC contract.
+        // the only writer in MVP-0C's SPSC contract. Length is stored with
+        // write_unaligned because slot stride is not required to be 4-byte aligned.
         unsafe {
             let slot_ptr = self.slot_ptr(slot);
-            (slot_ptr as *mut u32).write(payload.len() as u32);
+            slot_ptr.cast::<u32>().write_unaligned(len);
             std::ptr::copy_nonoverlapping(payload.as_ptr(), slot_ptr.add(LEN_SIZE), payload.len());
         }
         header
@@ -102,14 +104,15 @@ impl SharedRing {
             return Ok(None);
         }
 
-        let slot = consumer % header.capacity as u64;
+        let slot = consumer % u64::from(header.capacity);
         // SAFETY: slot_ptr is within the mmap range by the same bounds argument
         // as send(). The consumer is the only reader that advances consumer in
-        // MVP-0B's SPSC contract, and producer Acquire observes the payload
-        // writes that happened before producer Release.
+        // MVP-0C's SPSC contract, and producer Acquire observes the payload
+        // writes that happened before producer Release. Length is read
+        // unaligned for the same stride reason as send().
         let payload = unsafe {
             let slot_ptr = self.slot_ptr(slot);
-            let len = (slot_ptr as *const u32).read() as usize;
+            let len = slot_ptr.cast::<u32>().read_unaligned() as usize;
             if len > header.slot_size as usize {
                 return Err(WireStatus::InvalidObject);
             }
@@ -159,10 +162,11 @@ impl SharedRing {
             producer: AtomicU64::new(0),
             consumer: AtomicU64::new(0),
         };
-        // SAFETY: the mapping is at least the size of RingHeader by construction
-        // and is uniquely initialized by the creator before peers open it.
+        // SAFETY: the mapping is at least the size of RingHeader by construction,
+        // mmap returns a page-aligned pointer, and the creator uniquely
+        // initializes the header before peers open it.
         unsafe {
-            (self.ptr.as_ptr() as *mut RingHeader).write(header);
+            self.ptr.cast::<RingHeader>().as_ptr().write(header);
         }
     }
 
@@ -184,7 +188,7 @@ impl SharedRing {
     fn header(&self) -> &RingHeader {
         // SAFETY: SharedRing is only constructed from a valid mmap whose length
         // is at least RingHeader. The header lives for the mapping lifetime.
-        unsafe { &*(self.ptr.as_ptr() as *const RingHeader) }
+        unsafe { self.ptr.cast::<RingHeader>().as_ref() }
     }
 
     unsafe fn slot_ptr(&self, slot: u64) -> *mut u8 {
