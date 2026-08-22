@@ -3,6 +3,11 @@ resolver = "3"
 members = [
     "crates/court-hosted",
     "crates/court-hosted-linux",
+    "crates/root-court",
+]
+default-members = [
+    "crates/court-hosted",
+    "crates/court-hosted-linux",
 ]
 
 [workspace.package]

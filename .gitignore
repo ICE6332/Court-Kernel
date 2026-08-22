@@ -6,3 +6,7 @@
 *~
 Thumbs.db
 .DS_Store
+/third_party/limine/
+/build/
+*.iso
+ovmf-vars.fd

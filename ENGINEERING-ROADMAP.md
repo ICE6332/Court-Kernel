@@ -98,3 +98,13 @@ MVP-0C 已完成：Root runner 由 manifest + policy 驱动。
 ```
 
 路线 A 下一步（尚未开始）：第二个服务形态（例如 Storage Court），或给 corridor 补显式状态机。进路线 B/C 的前置条件不变。
+
+MVP-1 QEMU/UEFI bring-up 已能在 Debian WSL2 上真实启动：
+
+```text
+UEFI64 + Limine 10 加载 Root Court ELF（higher-half, long mode, HHDM paging）
+串口打出 bootloader / firmware / memory map / Root CSpace+namespace
+Limine MP 拉起 3 个 AP（-smp 4），原子握手后 isa-debug-exit 成功
+```
+
+尚未完成的 MVP-1 项：自有 GDT/IDT、物理 bump allocator、x2APIC timer 与 ICR IPI。运行：`scripts/run-qemu.sh`。

@@ -17,7 +17,9 @@ Court Kernel（庭内核，代号 Garden）是一个研究型 OS 架构的 feder
 - **MVP-0B** = `court-hosted-linux` crate，多进程 Unix host 原型。
 - **MVP-0C** = `ck-root` 由 `fixtures/packet-rx/manifest.json` + `policy.json` 驱动；`--demo packet-rx` 是同一套 fixture 的编译内嵌副本。policy `after` 必须指向 pipeline 中更早的 phase。
 
-Toolchain is pinned in `rust-toolchain.toml` to **Rust 1.98.0** / edition 2024. Hosted code may use 1.95+ language features (`cfg_select!`, match `if let` guards) and should not assume a Windows global toolchain older than that.
+Toolchain is pinned in `rust-toolchain.toml` to **Rust 1.98.0** / edition 2024 (`x86_64-unknown-none` + `llvm-tools-preview` included). Hosted code may use 1.95+ language features (`cfg_select!`, match `if let` guards) and should not assume a Windows global toolchain older than that.
+
+Bare-metal Root Court lives in `crates/root-court` (`#![no_std]`, Limine protocol implemented in-tree so it stays on stable). Do not mix VMX/EPT work into `court-hosted`. Boot with `scripts/run-qemu.sh` from Linux/WSL2. `cargo test --workspace` uses `default-members` and does **not** build the kernel image; use `cargo build -p root-court --release --target x86_64-unknown-none`.
 
 ## Build, test, run
 

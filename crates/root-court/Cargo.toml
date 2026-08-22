@@ -1,0 +1,17 @@
+[package]
+name = "root-court"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Bare-metal Root Court kernel image (MVP-1 QEMU/UEFI bring-up)"
+
+[[bin]]
+name = "root-court"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+spin = "0.10"

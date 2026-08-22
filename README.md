@@ -15,6 +15,7 @@ This repository is a research prototype of a federated OS architecture for heter
 | MVP-0A | `court-hosted`: in-process Root Court object model | done |
 | MVP-0B | `court-hosted-linux`: multi-process Unix prototype (`ck-root` / `ck-app` / `ck-net`) | done |
 | MVP-0C | manifest.json + policy.json driven demo | done |
+| MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | boots (GDT/IDT/x2APIC timer still open) |
 | Route B | seL4 / Genode substrate | not started |
 | Route C | bare-metal Root Court microhypervisor (VMX/EPT/IOMMU) | not started |
 
@@ -30,6 +31,9 @@ Court-Kernel/
   fixtures/packet-rx         canonical MVP-0C manifest + policy
   crates/court-hosted        in-process object model (no unsafe)
   crates/court-hosted-linux  Unix multi-process mapping + ck-* binaries
+  crates/root-court          no_std Root Court kernel (UEFI/Limine)
+  boot/limine.conf           Limine boot entry
+  scripts/run-qemu.sh        build ISO and boot QEMU
 ```
 
 ## Toolchain
@@ -65,6 +69,17 @@ cargo run -p court-hosted-linux --bin ck-root -- \
 ```
 
 `ck-app` and `ck-net` are spawned by `ck-root`. On Windows, `cargo test --workspace` still builds the portable protocol/manifest/object-model tests; the multi-process demo is `cfg(unix)` only.
+
+## Bare-metal boot (QEMU + UEFI)
+
+Linux / Debian WSL2:
+
+```bash
+# once: qemu-system-x86 ovmf xorriso
+bash scripts/run-qemu.sh
+```
+
+This builds `root-court` for `x86_64-unknown-none`, wraps it in a Limine UEFI ISO, and boots QEMU with serial on stdio. Success is `BOOT_OK` plus QEMU exit status 33 (`isa-debug-exit`).
 
 ## Design in one page
 
