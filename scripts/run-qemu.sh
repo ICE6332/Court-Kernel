@@ -51,6 +51,7 @@ cp "$OVMF_VARS_SRC" "$OVMF_VARS"
 
 QEMU=(qemu-system-x86_64
     -M q35
+    -cpu max
     -m 256M
     -smp 4
     -serial stdio

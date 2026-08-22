@@ -4,9 +4,9 @@
 
 庭内核（Court Kernel，代号 Garden）是一个研究型 **federated kernel** 原型：操作系统按功能切成并列的 Court（庭），由一个最小可信根 Root Court 负责 capability、命名空间、隔离和连廊（Corridor）。
 
-当前仓库实现的是 **路线 A：Linux-hosted research prototype**。它还不是可启动的裸机内核，也不提供 POSIX/Linux ABI。它用来在 host 上验证对象模型、capability、namespace、corridor、trace 和 fault containment。
+当前仓库同时推进两条线：路线 A 的 Linux-hosted 对象模型原型，以及 MVP-1 的 QEMU/UEFI Root Court bring-up。它还不提供 POSIX/Linux ABI，也还不是 VMX/EPT microhypervisor。
 
-This repository is a research prototype of a federated OS architecture for heterogeneous x86. The live code is a Linux-hosted object-model simulator, not a bootable kernel.
+This repository is a research prototype of a federated OS architecture for heterogeneous x86. Hosted crates validate the object model; `crates/root-court` is a real UEFI kernel image that boots under QEMU.
 
 ## Status
 
@@ -15,7 +15,7 @@ This repository is a research prototype of a federated OS architecture for heter
 | MVP-0A | `court-hosted`: in-process Root Court object model | done |
 | MVP-0B | `court-hosted-linux`: multi-process Unix prototype (`ck-root` / `ck-app` / `ck-net`) | done |
 | MVP-0C | manifest.json + policy.json driven demo | done |
-| MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | boots (GDT/IDT/x2APIC timer still open) |
+| MVP-1 | QEMU/UEFI Root Court bring-up (`crates/root-court`) | done (GDT/IDT, bump allocator, x2APIC timer, ICR IPI) |
 | Route B | seL4 / Genode substrate | not started |
 | Route C | bare-metal Root Court microhypervisor (VMX/EPT/IOMMU) | not started |
 
@@ -79,7 +79,7 @@ Linux / Debian WSL2:
 bash scripts/run-qemu.sh
 ```
 
-This builds `root-court` for `x86_64-unknown-none`, wraps it in a Limine UEFI ISO, and boots QEMU with serial on stdio. Success is `BOOT_OK` plus QEMU exit status 33 (`isa-debug-exit`).
+This builds `root-court` for `x86_64-unknown-none`, wraps it in a Limine UEFI ISO, and boots QEMU with serial on stdio. Success is `BOOT_OK` plus QEMU exit status 33 (`isa-debug-exit`). The kernel loads its own GDT/IDT, bump-allocates from the Limine usable map, enables x2APIC, and ping-pongs an ICR IPI across 4 CPUs.
 
 ## Design in one page
 

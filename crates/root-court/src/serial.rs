@@ -1,6 +1,8 @@
 use core::fmt::{self, Write};
 use spin::Mutex;
 
+use crate::cpu::{self, inb, outb};
+
 const COM1: u16 = 0x3F8;
 const ISA_DEBUG_EXIT: u16 = 0xF4;
 
@@ -12,6 +14,7 @@ pub struct SerialPort {
 
 impl SerialPort {
     fn init(&self) {
+        // SAFETY: COM1 is dedicated to kernel bring-up logs.
         unsafe {
             outb(self.port + 1, 0x00);
             outb(self.port + 3, 0x80);
@@ -24,6 +27,7 @@ impl SerialPort {
     }
 
     fn write_byte(&self, byte: u8) {
+        // SAFETY: COM1 transmitter holding register.
         unsafe {
             while inb(self.port + 5) & 0x20 == 0 {
                 core::hint::spin_loop();
@@ -53,46 +57,43 @@ pub fn write_fmt(args: fmt::Arguments<'_>) {
     let _ = SERIAL.lock().write_fmt(args);
 }
 
+/// Interrupt-safe serial write; may interleave with the locked printer.
+pub fn print_raw(args: fmt::Arguments<'_>) {
+    let _ = RawSerial.write_fmt(args);
+}
+
+struct RawSerial;
+
+impl Write for RawSerial {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let port = SerialPort { port: COM1 };
+        for byte in s.bytes() {
+            if byte == b'\n' {
+                port.write_byte(b'\r');
+            }
+            port.write_byte(byte);
+        }
+        Ok(())
+    }
+}
+
 pub fn qemu_exit_success() -> ! {
+    // SAFETY: isa-debug-exit is the QEMU bring-up contract (0x10 = success).
     unsafe { outb(ISA_DEBUG_EXIT, 0x10) };
     hcf()
 }
 
 pub fn qemu_exit_failure() -> ! {
+    // SAFETY: isa-debug-exit is the QEMU bring-up contract (0x11 = failure).
     unsafe { outb(ISA_DEBUG_EXIT, 0x11) };
     hcf()
 }
 
 pub fn hcf() -> ! {
+    cpu::cli();
     loop {
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
-        }
+        cpu::hlt();
     }
-}
-
-unsafe fn outb(port: u16, value: u8) {
-    unsafe {
-        core::arch::asm!(
-            "out dx, al",
-            in("dx") port,
-            in("al") value,
-            options(nomem, nostack, preserves_flags)
-        );
-    }
-}
-
-unsafe fn inb(port: u16) -> u8 {
-    let value: u8;
-    unsafe {
-        core::arch::asm!(
-            "in al, dx",
-            in("dx") port,
-            out("al") value,
-            options(nomem, nostack, preserves_flags)
-        );
-    }
-    value
 }
 
 #[macro_export]

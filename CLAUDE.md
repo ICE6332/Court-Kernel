@@ -10,7 +10,7 @@ Court Kernel（庭内核，代号 Garden）是一个研究型 OS 架构的 feder
 - `Court-Kernel-RFC-0002.md` — Court Kernel ABI 与 Corridor ABI 草案（`ck_cap_invoke` / `ck_msg` / `ck_boot_info` / 5 类 corridor transport / IDL）。这是**未来**的工程合约，不是当前 hosted prototype 必须立刻满足的接口。
 - `ENGINEERING-ROADMAP.md` — 三段式推进（路线 A → B → C）与 MVP 状态。
 
-仓库当前阶段是 **路线 A — Linux-hosted research prototype**（不是真实裸机内核），用来在 host 上验证对象模型、capability、namespace、corridor、trace 和 fault containment 的语义，再进入 seL4/Genode 阶段，最后才写真正的 Root Court microhypervisor。RFC-0001 中提到的 VMX/EPT/IOMMU 和 RFC-0002 的 `vmcall` / `vmmcall` call gate 都尚未启动，不要把那一层的问题混进当前 hosted prototype 的修改里——RFC-0002 §2 把当前阶段定义为 "Stage A: Rust/C 内部函数调用模拟 ck_cap_invoke"，仓库现状对应这一阶段。
+仓库同时有 **路线 A — Linux-hosted research prototype**（`court-hosted*`）和 **MVP-1 Root Court bring-up**（`crates/root-court`，QEMU/UEFI 可启动）。hosted 线用来验证对象模型、capability、namespace、corridor、trace 和 fault containment；裸机线刚完成 GDT/IDT、bump allocator、x2APIC timer 和 ICR IPI。RFC-0001 中的 VMX/EPT/IOMMU 和 RFC-0002 的 `vmcall` / `vmmcall` 都尚未启动，不要把那一层的问题混进 hosted prototype——RFC-0002 §2 把 hosted 阶段定义为 "Stage A: Rust/C 内部函数调用模拟 ck_cap_invoke"。
 
 阶段命名（提交历史和 trace 事件名都会出现）：
 - **MVP-0A** = `court-hosted` crate，in-process 对象模型。
@@ -19,7 +19,7 @@ Court Kernel（庭内核，代号 Garden）是一个研究型 OS 架构的 feder
 
 Toolchain is pinned in `rust-toolchain.toml` to **Rust 1.98.0** / edition 2024 (`x86_64-unknown-none` + `llvm-tools-preview` included). Hosted code may use 1.95+ language features (`cfg_select!`, match `if let` guards) and should not assume a Windows global toolchain older than that.
 
-Bare-metal Root Court lives in `crates/root-court` (`#![no_std]`, Limine protocol implemented in-tree so it stays on stable). Do not mix VMX/EPT work into `court-hosted`. Boot with `scripts/run-qemu.sh` from Linux/WSL2. `cargo test --workspace` uses `default-members` and does **not** build the kernel image; use `cargo build -p root-court --release --target x86_64-unknown-none`.
+Bare-metal Root Court lives in `crates/root-court` (`#![no_std]`, Limine protocol implemented in-tree so it stays on stable). It now owns GDT/IDT, a usable-map bump allocator, x2APIC timer, and ICR IPI; paging is still the Limine HHDM. Do not mix VMX/EPT work into `court-hosted`. Boot with `scripts/run-qemu.sh` from Linux/WSL2 (`-cpu max` is required for x2APIC). `cargo test --workspace` uses `default-members` and does **not** build the kernel image; use `cargo build -p root-court --release --target x86_64-unknown-none`.
 
 ## Build, test, run
 
