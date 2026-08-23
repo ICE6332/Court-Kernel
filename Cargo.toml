@@ -1,8 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/court-abi",
     "crates/court-hosted",
     "crates/court-hosted-linux",
+    "crates/court-images",
     "crates/root-court",
 ]
 default-members = [

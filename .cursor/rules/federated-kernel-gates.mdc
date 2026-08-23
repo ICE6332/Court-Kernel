@@ -1,0 +1,33 @@
+---
+description: 庭内核双护栏：防宏内核退化，也防写成微内核变种
+alwaysApply: true
+---
+
+# 联邦内核双护栏
+
+庭内核是 **federated kernel**（RFC-0001），不是宏内核，也不是 seL4/微内核克隆。
+
+Root Court = 最小 TCB（硬件、隔离、capability、命名、放置、加载、连廊建立/撤销）。
+Court = 功能垂直切片，内部结构自选。
+Corridor = 有类型、显式、可撤销。名字只发现，能力才授权。
+
+改 `crates/root-court` 之前必须过两关，任一失败就停。
+
+## 反宏内核
+
+Root Court **不得**吸收：TCP/IP、FS/VFS、POSIX、GUI、通用运行时、可庭化的复杂驱动。
+Court 业务逻辑必须留在 Court Image 里，不得写回内核 ELF。
+庭之间禁止靠内核全局隐式协作；只能走 corridor 或显式 cap。
+`lookup` 不是 `open`。同 ring 受信 Courtlet 只是 Trusted Bring-up，不是产品形态。
+
+## 反微内核变种
+
+禁止用一条无类型 IPC/syscall 替换有类型 corridor。
+禁止强迫每个庭都是同构用户态 server。
+禁止把 namespace / placement / loader / cap mint-revoke 从 Root Court 拆成「服务进程」。
+在独立 Court Image 已经离开内核 ELF、且 Courtlet 已有独立 CR3 之后，仍禁止把 VMX/EPT 当作本阶段工作。
+seL4 只借鉴 capability，不搬它的「全是用户态组件 + 单一 IPC」组织法。
+
+## 本阶段下一项
+
+隔离加深或回收 Limine reclaimable。不是 VMX，不是通用 syscall 表，不是把协议栈写进 Root Court。

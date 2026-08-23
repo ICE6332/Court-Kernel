@@ -115,6 +115,12 @@ cargo run -p court-hosted-linux --bin ck-root -- \
 - **无 protocol ID / 版本协商**。RFC-0002 §21 要求每个 corridor 上层协议带 128-bit protocol ID 与 major/minor/patch；当前 demo 直接绑死 `/court/net0/packet/rx` 路径，没有协议层。
 - **Wire trace ≠ ABI trace**。当前 `WireTrace { event: String, court, path, status, len, detail }` 是 demo 的人读 NDJSON；RFC-0002 §25.1 的 `ck_trace_event { timestamp_ns, source_court_id, corridor_id, event_type: u32, arg0..arg3 }` 是固定 layout 的二进制事件。两者都会保留，但不要假设字段名能直接搬。
 
+## 联邦内核双护栏（新会话开工前必过）
+
+庭内核是 federated kernel，不是宏内核，也不是微内核变种。细则见 `.cursor/rules/federated-kernel-gates.mdc` 和 RFC-0001 §6.1。
+
+当前审计：`crates/root-court` 职责仍是 bring-up TCB，**没有**协议栈/FS/POSIX。app/net 已是独立 Court Image，由 Root Court 加载到 lower-half。禁止 VMX，禁止通用 IPC syscall，禁止把业务逻辑写回 Root Court。
+
 ## 写代码时的约束
 
 - 修改对象模型语义（cap derivation、revoke 传播、peer-down 检测）务必同步更新 `court-hosted/src/lib.rs` 的 `tests` 模块——它们是当前唯一覆盖语义边界的回归测试。

@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "court-abi"
+version = "0.1.0"
+
+[[package]]
 name = "court-hosted"
 version = "0.1.0"
 
@@ -14,6 +18,13 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "court-images"
+version = "0.1.0"
+dependencies = [
+ "court-abi",
 ]
 
 [[package]]
@@ -65,6 +76,7 @@ dependencies = [
 name = "root-court"
 version = "0.1.0"
 dependencies = [
+ "court-abi",
  "spin",
 ]
 

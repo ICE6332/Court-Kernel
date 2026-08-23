@@ -109,7 +109,9 @@ x2APIC 周期 timer + ICR self/all-except-self IPI ping-pong
 Limine MP 拉起 3 个 AP（-smp 4, -cpu max），isa-debug-exit 成功
 ```
 
-MVP-2 第二刀已完成：每 CPU 自建内核栈并切 RSP；Courtlet CR3 克隆 PML4[511]；两个同 ring 受信 Courtlet 通过 shared ring 发一包，revoke 后 send 被拒绝。尚未加载独立 Court Image，也尚未回收 Limine 内存。不是 VMX。运行：`scripts/run-qemu.sh`。
+MVP-2 第二项已完成：每 CPU 自建内核栈并切 RSP；Courtlet CR3 克隆 PML4[511]；两个同 ring 受信 Courtlet 通过 shared ring 发一包，revoke 后 send 被拒绝。
+
+MVP-2 下一项（Court Image 加载）已完成：app/net 逻辑在独立 Court Image ELF 中，由 Root Court 映射到 lower-half（入口 `0x100000`），仍使用已有独立 CR3。尚未回收 Limine 内存。不是 VMX。运行：`scripts/run-qemu.sh`。
 
 ### 已记账、尚未修的隐形依赖
 
@@ -119,5 +121,25 @@ MVP-2 第二刀已完成：每 CPU 自建内核栈并切 RSP；Courtlet CR3 克�
    BSP/AP 已切到自建内核栈，具备回收前置条件，但还没有把 Limine reclaimable 从 HHDM 拿掉。
 2. **PTE NX 位依赖 `EFER.NXE`。**
    当前映射故意不设 NX。做 W^X 时必须先置 `IA32_EFER.NXE`，再往 PTE 写 NX（bit 63）；顺序反了是 reserved-bit `#PF`。
-3. **Courtlet 仍是同 ring 受信桩。**
-   CR3 已独立、PML4[511] 已共享，但入口还在内核 higher-half。下一步才是加载独立 Court Image，不是 VMX。
+3. **Courtlet 仍是同 ring 受信执行。**
+   CR3 已独立、PML4[511] 已共享，Court Image 已在 lower-half 加载。下一步仍不是 VMX；隔离加深再走硬件虚拟化。
+
+## 架构护栏（防宏内核 / 防微内核变种）
+
+开工前用这两条卡住实现方向。RFC-0001 §0 / §6.1 是原文；`.cursor/rules/federated-kernel-gates.mdc` 是会话强制规则。
+
+```text
+宏内核滑移：Root Court 开始拥有协议栈、FS、POSIX、驱动业务、庭间隐式全局状态
+微内核滑移：一切变成同构用户态 server + 一条无类型 IPC；namespace/placement/loader 被拆出 Root Court
+联邦内核（目标）：最小 Root Court TCB + 垂直功能庭 + 有类型 corridor；庭内部结构自由
+```
+
+2026-08-23 对照 `crates/root-court`：
+
+| 判定 | 结论 |
+|---|---|
+| 是否已是宏内核 | 否。无 TCP/IP、VFS、POSIX、GUI。 |
+| 是否已是微内核变种 | 否。没有通用 IPC syscall，也没有把 TCB 拆成服务进程。加载器留在 Root Court。 |
+| 已还的债 | app/net 已从内核函数移出，成为独立 Court Image，由 Root Court 映到 lower-half。 |
+| 下一项允许 | 回收 Limine reclaimable、W^X/NX、或加深隔离；仍不是把协议栈写进 Root Court。 |
+| 下一项禁止 | VMX/EPT、通用 syscall 表、把协议栈/文件系统放进 Root Court、用一条 IPC 取代 corridor。 |

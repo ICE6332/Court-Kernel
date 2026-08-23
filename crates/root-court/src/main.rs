@@ -5,6 +5,7 @@ mod apic;
 mod cpu;
 mod gdt;
 mod idt;
+mod image;
 mod limine_abi;
 mod mm;
 mod object;
