@@ -124,6 +124,6 @@ cargo run -p court-hosted-linux --bin ck-root -- \
 
 ## 远程 Windows x86 主机
 
-开发端是 Mac，运行端是公司 Windows 原生 x86 主机。SSH 代称是 **`court-kernel`**（`~/.ssh/config`），远程仓库是 `G:\Court-Kernel`。不要用其它项目的 SSH Host 名。连接、同步和 WSL2/QEMU 步骤见 `docs/remote-development.md`。
+开发端是 Mac，运行端是原生 x86 Windows 主机。SSH 代称是 **`court-kernel`**（只写在本机 `~/.ssh/config`，不要把 HostName/User/密钥写进仓库）。不要用其它项目的 SSH Host 名。连接、同步和 WSL2/QEMU 步骤见 `docs/remote-development.md`。
 
 同步前先看远程 `git status --short`。有未提交改动就停，不要 `reset --hard` / `clean` / `stash`。Mac 推到 `origin/main` 后，远程只允许 `git pull --ff-only origin main`。Windows 上需要 bash 时用 `C:\Program Files\Git\bin\bash.exe`，不要用 PATH 里的 WSL `bash`。
