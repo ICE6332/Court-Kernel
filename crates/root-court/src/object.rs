@@ -14,11 +14,14 @@ struct Court {
     _name: &'static str,
 }
 
+pub const RIGHT_SEND: u64 = 1 << 0;
+pub const RIGHT_RECV: u64 = 1 << 1;
+
 #[derive(Clone, Copy)]
 struct Cap {
-    _id: u64,
+    id: u64,
     _object: u64,
-    _rights: u64,
+    rights: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -55,6 +58,40 @@ impl RootCourt {
         let _cap = self.mint(ns, 1 << 6)?; // OBSERVE
         let _ = root;
         Ok(())
+    }
+
+    /// Spawn a named court and bind it in the root namespace.
+    pub fn spawn_court(
+        &mut self,
+        name: &'static str,
+        path: &'static str,
+    ) -> Result<(u64, u64), &'static str> {
+        let court = self.create_court(name)?;
+        let object = self.alloc_object();
+        self.bind(path, object)?;
+        Ok((court, object))
+    }
+
+    pub fn mint_cap(&mut self, object: u64, rights: u64) -> Result<u64, &'static str> {
+        self.mint(object, rights)
+    }
+
+    pub fn revoke_cap(&mut self, cap_id: u64) -> Result<(), &'static str> {
+        for slot in self.caps.iter_mut().flatten() {
+            if slot.id == cap_id {
+                slot.rights = 0;
+                return Ok(());
+            }
+        }
+        Err("no such cap")
+    }
+
+    pub fn cap_rights(&self, cap_id: u64) -> Option<u64> {
+        self.caps
+            .iter()
+            .flatten()
+            .find(|cap| cap.id == cap_id)
+            .map(|cap| cap.rights)
     }
 
     pub fn court_count(&self) -> usize {
@@ -114,9 +151,9 @@ impl RootCourt {
         self.next_cap += 1;
         let id = self.next_cap;
         *slot = Some(Cap {
-            _id: id,
+            id,
             _object: object,
-            _rights: rights,
+            rights,
         });
         Ok(id)
     }

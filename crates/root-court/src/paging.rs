@@ -32,6 +32,7 @@ const TABLE_FLAGS: u64 = PRESENT | WRITE;
 const PAGE_FLAGS: u64 = PRESENT | WRITE;
 
 static ROOT_CR3: AtomicU64 = AtomicU64::new(0);
+static KERNEL_PML4_PHYS: AtomicU64 = AtomicU64::new(0);
 
 unsafe extern "C" {
     static __kernel_start: u8;
@@ -208,6 +209,8 @@ pub fn build(
         mapper_alloc.alloc_table()?
     };
 
+    KERNEL_PML4_PHYS.store(pml4_phys, Ordering::Release);
+
     let mut mapper = Mapper {
         bump,
         pml4_phys,
@@ -277,4 +280,66 @@ pub fn load_published() -> Result<(), &'static str> {
     }
     unsafe { cpu::load_cr3(phys) };
     Ok(())
+}
+
+pub fn kernel_pml4_phys() -> u64 {
+    KERNEL_PML4_PHYS.load(Ordering::Acquire)
+}
+
+/// Isolated lower-half address space that clones kernel PML4[511].
+pub struct AddressSpace {
+    pub cr3: u64,
+    pml4_phys: u64,
+}
+
+impl AddressSpace {
+    pub fn clone_kernel(bump: &mut BumpAllocator) -> Result<Self, &'static str> {
+        let kernel_pml4 = kernel_pml4_phys();
+        if kernel_pml4 == 0 {
+            return Err("kernel PML4 not published");
+        }
+        let mut mapper = Mapper {
+            bump,
+            pml4_phys: 0,
+            table_pages: 0,
+        };
+        let new_pml4 = mapper.alloc_table()?;
+        mapper.pml4_phys = new_pml4;
+        // Copy every high (and currently empty low) PML4 slot so HHDM and
+        // kernel higher-half both stay reachable after the CR3 switch.
+        for index in 0..512 {
+            let src = mapper.entry(kernel_pml4, index);
+            let dst = mapper.entry(new_pml4, index);
+            // SAFETY: both slots are mapper-owned table pages via HHDM.
+            unsafe { dst.write(src.read()) };
+        }
+        let cr3 = if cpu::cr4() & cpu::CR4_LA57 != 0 {
+            wrap_la57(&mut mapper, new_pml4)?
+        } else {
+            new_pml4
+        };
+        Ok(Self {
+            cr3,
+            pml4_phys: new_pml4,
+        })
+    }
+
+
+    pub fn map(
+        &mut self,
+        bump: &mut BumpAllocator,
+        virt: u64,
+        phys: u64,
+        len: u64,
+    ) -> Result<(), &'static str> {
+        if virt >= 0x0000_8000_0000_0000 {
+            return Err("courtlet map must be lower-half");
+        }
+        let mut mapper = Mapper {
+            bump,
+            pml4_phys: self.pml4_phys,
+            table_pages: 0,
+        };
+        mapper.map_range(virt, phys, len)
+    }
 }

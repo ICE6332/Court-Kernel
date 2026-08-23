@@ -116,6 +116,14 @@ pub fn cr3() -> u64 {
     value
 }
 
+pub fn rsp() -> u64 {
+    let value: u64;
+    unsafe {
+        asm!("mov {}, rsp", out(reg) value, options(nomem, nostack, preserves_flags));
+    }
+    value
+}
+
 pub const CR4_LA57: u64 = 1 << 12;
 
 pub fn cr4() -> u64 {

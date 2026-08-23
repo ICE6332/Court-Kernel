@@ -9,6 +9,7 @@ use crate::limine_abi::{MemmapEntry, MEMMAP_USABLE};
 const PAGE: u64 = 0x1000;
 const MIN_REGION: u64 = 64 * 1024;
 
+#[derive(Clone, Copy)]
 pub struct BumpAllocator {
     hhdm: u64,
     start: u64,

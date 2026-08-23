@@ -10,7 +10,10 @@ mod mm;
 mod object;
 mod paging;
 mod serial;
+mod stack;
+mod courtlet;
 
+use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU32, Ordering};
 use limine_abi::{
     BaseRevision, BootloaderInfoRequest, ExecutableAddressRequest, FirmwareTypeRequest, HhdmRequest,
@@ -68,6 +71,15 @@ static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 static AP_READY: AtomicU32 = AtomicU32::new(0);
+
+struct BringUp {
+    bump: mm::BumpAllocator,
+}
+
+struct BringUpCell(UnsafeCell<Option<BringUp>>);
+unsafe impl Sync for BringUpCell {}
+
+static BRINGUP: BringUpCell = BringUpCell(UnsafeCell::new(None));
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn kmain() -> ! {
@@ -266,6 +278,33 @@ unsafe extern "C" fn kmain() -> ! {
     }
     println!("paging: cr3 {:#x} hhdm live", pages.pml4_phys);
 
+    let ncpu = MP.response().map(|mp| mp.cpus().len()).unwrap_or(1);
+    if let Err(error) = stack::alloc_all(&mut bump, ncpu) {
+        println!("error: kernel stacks: {error}");
+        qemu_exit_failure();
+    }
+    println!(
+        "stack: {} cpu(s) bsp top={:#x} limine rsp={:#x}",
+        ncpu,
+        stack::top(bsp_slot),
+        cpu::rsp()
+    );
+    // SAFETY: bump is exclusively owned here; kmain_on_kstack never returns.
+    unsafe {
+        *BRINGUP.0.get() = Some(BringUp { bump });
+        stack::switch_to(stack::top(bsp_slot), kmain_on_kstack, bsp_slot as u64);
+    }
+}
+
+extern "C" fn kmain_on_kstack(_slot: u64) -> ! {
+    println!("stack: kernel rsp={:#x}", cpu::rsp());
+    let bump = unsafe {
+        &mut (*BRINGUP.0.get())
+            .as_mut()
+            .expect("missing bring-up state")
+            .bump
+    };
+
     let mut root = RootCourt::new();
     if let Err(error) = root.bootstrap() {
         println!("error: object bootstrap failed: {error}");
@@ -349,6 +388,12 @@ unsafe extern "C" fn kmain() -> ! {
     );
 
     cpu::cli();
+
+    if let Err(error) = courtlet::run_demo(bump, &mut root) {
+        println!("error: courtlet demo: {error}");
+        qemu_exit_failure();
+    }
+
     println!("BOOT_OK cpus={cpu_count}");
     qemu_exit_success();
 }
@@ -386,7 +431,16 @@ extern "C" fn ap_entry(info: &'static MpInfo) -> ! {
     if apic::enable_x2apic().is_err() {
         hcf();
     }
-    // SAFETY: this AP has loaded the kernel IDT and enabled x2APIC.
+    let top = stack::top(slot);
+    if top == 0 {
+        hcf();
+    }
+    // SAFETY: per-CPU kernel stack was allocated on the BSP before APs started.
+    unsafe { stack::switch_to(top, ap_on_kstack, slot as u64) };
+}
+
+extern "C" fn ap_on_kstack(_slot: u64) -> ! {
+    // SAFETY: this AP has loaded the kernel IDT and enabled x2APIC on its kernel stack.
     unsafe { cpu::sti() };
     AP_READY.fetch_add(1, Ordering::Release);
     loop {

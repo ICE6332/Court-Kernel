@@ -109,15 +109,15 @@ x2APIC 周期 timer + ICR self/all-except-self IPI ping-pong
 Limine MP 拉起 3 个 AP（-smp 4, -cpu max），isa-debug-exit 成功
 ```
 
-MVP-2 第一刀已完成：Root Court 自建 4-level PML4，按 revision 3 语义映射内核 higher-half + restrictive HHDM，BSP/AP 都 `mov cr3` 切过去。页表策略尚未给 Courtlet 做独立地址空间。下一步才是加载 Court Image / 隔离域雏形 / corridor，不是 VMX。运行：`scripts/run-qemu.sh`。
+MVP-2 第二刀已完成：每 CPU 自建内核栈并切 RSP；Courtlet CR3 克隆 PML4[511]；两个同 ring 受信 Courtlet 通过 shared ring 发一包，revoke 后 send 被拒绝。尚未加载独立 Court Image，也尚未回收 Limine 内存。不是 VMX。运行：`scripts/run-qemu.sh`。
 
 ### 已记账、尚未修的隐形依赖
 
 这些不是现在的 bug，但顺序错了会直接炸。写在这里以免几周后忘掉。
 
-1. **回收 bootloader-reclaimable 之前必须先换栈。**
-   BSP 和所有 AP 仍跑在 Limine 分配的栈上，那些栈就在 reclaimable 区域。正确顺序：自建每 CPU 内核栈 → 切 RSP → 才能回收 Limine 内存。现在切 CR3 只是把 reclaimable 继续映射进自建 HHDM，没有收回。
+1. **回收 bootloader-reclaimable 仍未做。**
+   BSP/AP 已切到自建内核栈，具备回收前置条件，但还没有把 Limine reclaimable 从 HHDM 拿掉。
 2. **PTE NX 位依赖 `EFER.NXE`。**
    当前映射故意不设 NX。做 W^X 时必须先置 `IA32_EFER.NXE`，再往 PTE 写 NX（bit 63）；顺序反了是 reserved-bit `#PF`。
-3. **Courtlet 独立地址空间需要共享内核高半区的 PML4 克隆入口。**
-   现在的 `Mapper` 只有一份 PML4。给 Courtlet 建独立 CR3 时，应复制 Root 的内核 higher-half PML4 条目（index 511），不要为每个庭重走一遍内核映射。
+3. **Courtlet 仍是同 ring 受信桩。**
+   CR3 已独立、PML4[511] 已共享，但入口还在内核 higher-half。下一步才是加载独立 Court Image，不是 VMX。
