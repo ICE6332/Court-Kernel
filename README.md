@@ -8,6 +8,8 @@
 
 This repository is a research prototype of a federated OS architecture for heterogeneous x86. Hosted crates validate the object model; `crates/root-court` is a real UEFI kernel image that boots under QEMU.
 
+Mac 改代码、GitHub 同步、Windows 原生 x86 构建：见 [远程开发](docs/remote-development.md)。SSH 代称是 `court-kernel`。
+
 ## Status
 
 | Stage | What it is | State |

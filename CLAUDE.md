@@ -121,3 +121,9 @@ cargo run -p court-hosted-linux --bin ck-root -- \
 - Trace 是 demo 的可观测性合约，不要随手改 trace 事件名或 status 字符串；e2e 测试逐字匹配。
 - Demo 里若要 spawn 新角色（除了现有 app/net），需要扩 `CourtRole` enum、新增对应 binary、扩 `court_command` 的环境变量分支，并加 `CARGO_BIN_EXE_*` 注入到 e2e。
 - `unsafe_code = "forbid"` 是 `court-hosted` 的硬性约束。如果非要写裸指针/SIMD，应放进 `court-hosted-linux` 或新 crate，并写完整 `// SAFETY:` 注释。
+
+## 远程 Windows x86 主机
+
+开发端是 Mac，运行端是公司 Windows 原生 x86 主机。SSH 代称是 **`court-kernel`**（`~/.ssh/config`），远程仓库是 `G:\Court-Kernel`。不要用其它项目的 SSH Host 名。连接、同步和 WSL2/QEMU 步骤见 `docs/remote-development.md`。
+
+同步前先看远程 `git status --short`。有未提交改动就停，不要 `reset --hard` / `clean` / `stash`。Mac 推到 `origin/main` 后，远程只允许 `git pull --ff-only origin main`。Windows 上需要 bash 时用 `C:\Program Files\Git\bin\bash.exe`，不要用 PATH 里的 WSL `bash`。
